@@ -100,7 +100,7 @@ algo3/
 
 - **Python 3.8+** (tested with 3.9 and 3.10)
 - **8 GB RAM minimum** (16 GB recommended for large datasets)
-- **10 GB disk space** for intermediate and final files
+- **1 GB disk space** for intermediate and final files
 
 ### Python Dependencies
 
@@ -1378,3 +1378,4 @@ For technical questions:
 **Last updated**: 2024-11-01
 **Version**: 3.0
 **Author**: PSID Pipeline RA Team
+
