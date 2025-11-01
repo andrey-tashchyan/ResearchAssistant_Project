@@ -1,179 +1,179 @@
-# Pipeline PSID - Traitement et Construction de Panels de Données
+# PSID Pipeline - Data Processing and Panel Construction
 
-## 📋 Table des matières
+## 📋 Table of Contents
 
-1. [Vue d'ensemble](#vue-densemble)
-2. [Architecture du projet](#architecture-du-projet)
-3. [Installation et prérequis](#installation-et-prérequis)
-4. [Structure des données](#structure-des-données)
-5. [Pipeline complet](#pipeline-complet)
-6. [Scripts détaillés](#scripts-détaillés)
-7. [Fichiers de configuration](#fichiers-de-configuration)
-8. [Utilisation](#utilisation)
-9. [Formats de sortie](#formats-de-sortie)
-10. [Optimisations mémoire](#optimisations-mémoire)
-11. [Dépannage](#dépannage)
-12. [Exemples d'utilisation](#exemples-dutilisation)
-
----
-
-## 🎯 Vue d'ensemble
-
-Ce projet constitue un **pipeline complet et optimisé** pour le traitement des données du **Panel Study of Income Dynamics (PSID)**. Il transforme les fichiers bruts SAS/TXT en panels structurés et exploitables, avec un accent particulier sur:
-
-- **L'efficacité mémoire** : gestion de datasets de plusieurs dizaines de millions de lignes
-- **La traçabilité** : logging détaillé de chaque étape
-- **La flexibilité** : configuration via fichiers externes
-- **La performance** : sortie en format Parquet partitionné avec compression ZSTD
-
-### Objectifs principaux
-
-1. **Conversion** : Transformer les fichiers SAS/TXT en CSV exploitables
-2. **Mapping** : Créer une correspondance canonique entre variables et années
-3. **Grille canonique** : Construire une matrice variables × années
-4. **Fusion** : Combiner des variables similaires selon des règles définies
-5. **Panel final** : Générer des panels longs optimisés par famille et par année
+1. [Overview](#overview)
+2. [Project Architecture](#project-architecture)
+3. [Installation and Prerequisites](#installation-and-prerequisites)
+4. [Data Structure](#data-structure)
+5. [Complete Pipeline](#complete-pipeline)
+6. [Detailed Scripts](#detailed-scripts)
+7. [Configuration Files](#configuration-files)
+8. [Usage](#usage)
+9. [Output Formats](#output-formats)
+10. [Memory Optimizations](#memory-optimizations)
+11. [Troubleshooting](#troubleshooting)
+12. [Usage Examples](#usage-examples)
 
 ---
 
-## 🏗️ Architecture du projet
+## 🎯 Overview
+
+This project implements a **complete and optimized pipeline** for processing **Panel Study of Income Dynamics (PSID)** data. It transforms raw SAS/TXT files into structured, exploitable panels with a particular focus on:
+
+- **Memory efficiency**: Handling datasets with tens of millions of rows
+- **Traceability**: Detailed logging of each step
+- **Flexibility**: Configuration via external files
+- **Performance**: Partitioned Parquet output with ZSTD compression
+
+### Main Objectives
+
+1. **Conversion**: Transform SAS/TXT files into exploitable CSV
+2. **Mapping**: Create canonical correspondence between variables and years
+3. **Canonical Grid**: Build a variables × years matrix
+4. **Merging**: Combine similar variables according to defined rules
+5. **Final Panel**: Generate memory-optimized long panels by family and year
+
+---
+
+## 🏗️ Project Architecture
 
 ```
 algo3/
 │
-├── 📂 sorted_data/              # Données sources PSID
-│   ├── FAM2009ER.sas           # Scripts SAS de définition
-│   ├── FAM2009ER.txt           # Données brutes (format fixe)
-│   ├── FAM2009ER_full.csv      # CSV converti (généré)
+├── 📂 sorted_data/              # PSID source data
+│   ├── FAM2009ER.sas           # SAS definition scripts
+│   ├── FAM2009ER.txt           # Raw data (fixed-width format)
+│   ├── FAM2009ER_full.csv      # Converted CSV (generated)
 │   ├── WLTH1999.sas
 │   ├── WLTH1999.txt
-│   └── ...                      # Autres années (1999-2023)
+│   └── ...                      # Other years (1999-2023)
 │
-├── 📂 out/                      # Résultats intermédiaires
-│   ├── mapping_long.csv         # Dictionnaire complet des variables
-│   ├── fam_wlth_inventory.csv  # Inventaire des modules FAM/WLTH
-│   ├── canonical_grid.csv       # Grille canonique initiale
-│   ├── canonical_grid_merged.csv # Grille après fusion de lignes
-│   └── final_grid.csv           # Grille finale utilisée pour l'extraction
+├── 📂 out/                      # Intermediate results
+│   ├── mapping_long.csv         # Complete variable dictionary
+│   ├── fam_wlth_inventory.csv  # FAM/WLTH modules inventory
+│   ├── canonical_grid.csv       # Initial canonical grid
+│   ├── canonical_grid_merged.csv # Grid after row merging
+│   └── final_grid.csv           # Final grid used for extraction
 │
-├── 📂 final_results/            # Résultats finaux
-│   ├── panel_parent_child.csv   # Panel long individuel
-│   ├── parent_child_links.csv   # Relations parent-enfant
-│   ├── panel_summary.csv        # Statistiques descriptives
-│   ├── codes_resolved_audit.csv # Journal de correspondances
-│   ├── panel_grid_by_family.csv # ★ Panel par famille (format wide)
-│   ├── panel.parquet/           # ★ Panel optimisé (format partitionné)
-│   └── family_grids/            # (Optionnel) Un CSV par famille
+├── 📂 final_results/            # Final results
+│   ├── panel_parent_child.csv   # Individual long panel
+│   ├── parent_child_links.csv   # Parent-child relationships
+│   ├── panel_summary.csv        # Descriptive statistics
+│   ├── codes_resolved_audit.csv # Correspondence log
+│   ├── panel_grid_by_family.csv # ★ Panel by family (wide format)
+│   ├── panel.parquet/           # ★ Optimized panel (partitioned format)
+│   └── family_grids/            # (Optional) One CSV per family
 │
-├── 📜 Scripts Python principaux
-│   ├── sas_to_csv.py            # [1] Conversion SAS/TXT → CSV
-│   ├── create_mapping.py        # [2] Construction du mapping
-│   ├── psid_tool.py             # [3] Grille canonique
-│   ├── merge_grid.py            # [4] Fusion de lignes
-│   ├── build_final_panel.py     # [5] Panel optimisé Parquet
-│   └── build_panel_parent_child.py # Panel famille-enfant
+├── 📜 Main Python scripts
+│   ├── sas_to_csv.py            # [1] SAS/TXT → CSV conversion
+│   ├── create_mapping.py        # [2] Mapping construction
+│   ├── psid_tool.py             # [3] Canonical grid
+│   ├── merge_grid.py            # [4] Row merging
+│   ├── build_final_panel.py     # [5] Optimized Parquet panel
+│   └── build_panel_parent_child.py # Family-child panel
 │
-├── 📜 Scripts utilitaires
-│   ├── filter_grid_rows.py      # Filtrage de la grille
-│   ├── make_canonical_grid.py   # Alternative pour grille canonique
-│   ├── no_children_from_gid.py  # Analyse GID sans enfants
-│   ├── sas_to_csv_gid.py        # Conversion GID spécifique
-│   └── build_parent_child_presence_matrix.py # Matrice de présence
+├── 📜 Utility scripts
+│   ├── filter_grid_rows.py      # Grid filtering
+│   ├── make_canonical_grid.py   # Alternative for canonical grid
+│   ├── no_children_from_gid.py  # GID analysis without children
+│   ├── sas_to_csv_gid.py        # GID-specific conversion
+│   └── build_parent_child_presence_matrix.py # Presence matrix
 │
-├── 📜 Fichiers de configuration
-│   ├── file_list.txt            # Liste des fichiers à convertir
-│   └── merge_groups.txt         # Règles de fusion de variables
+├── 📜 Configuration files
+│   ├── file_list.txt            # List of files to convert
+│   └── merge_groups.txt         # Variable merging rules
 │
 ├── 📜 Orchestration
-│   ├── run_all.sh               # ★ Script maître exécutant tout le pipeline
-│   └── README.md                # Ce fichier
+│   ├── run_all.sh               # ★ Master script executing entire pipeline
+│   └── README.md                # This file
 │
-└── 📂 .vscode/                  # Configuration VSCode
+└── 📂 .vscode/                  # VSCode configuration
     └── extensions.json
 ```
 
 ---
 
-## 💻 Installation et prérequis
+## 💻 Installation and Prerequisites
 
-### Prérequis système
+### System Requirements
 
-- **Python 3.8+** (testé avec 3.9 et 3.10)
-- **8 GB RAM minimum** (16 GB recommandé pour les gros datasets)
-- **10 GB d'espace disque** pour les fichiers intermédiaires et finaux
+- **Python 3.8+** (tested with 3.9 and 3.10)
+- **8 GB RAM minimum** (16 GB recommended for large datasets)
+- **10 GB disk space** for intermediate and final files
 
-### Dépendances Python
+### Python Dependencies
 
 ```bash
-# Dépendances principales
+# Main dependencies
 pip install pandas>=1.5.0
 pip install numpy>=1.23.0
-pip install pyarrow>=10.0.0  # Pour le format Parquet
+pip install pyarrow>=10.0.0  # For Parquet format
 
-# Optionnel mais recommandé
-pip install tqdm              # Barres de progression
-pip install fastparquet       # Alternative à pyarrow
+# Optional but recommended
+pip install tqdm              # Progress bars
+pip install fastparquet       # Alternative to pyarrow
 ```
 
-### Installation complète avec environnement virtuel
+### Complete Installation with Virtual Environment
 
 ```bash
-# Créer un environnement virtuel
+# Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # Sur Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Installer les dépendances
+# Install dependencies
 pip install --upgrade pip
 pip install pandas numpy pyarrow tqdm
 
-# Vérifier l'installation
+# Verify installation
 python -c "import pandas; import pyarrow; print('OK')"
 ```
 
 ---
 
-## 📊 Structure des données
+## 📊 Data Structure
 
-### Sources PSID
+### PSID Sources
 
-Le projet traite deux types principaux de modules PSID:
+The project processes two main types of PSID modules:
 
-#### 1. **Module FAM (Family)** - Données démographiques et familiales
-- Variables familiales (taille du ménage, composition)
-- Caractéristiques du chef de famille
-- Informations sur les enfants
-- Format: `FAM{YEAR}ER.txt` et `FAM{YEAR}ER.sas`
-- Années disponibles: 2009, 2011, 2013, 2015, 2017, 2019, 2021, 2023
+#### 1. **FAM (Family) Module** - Demographic and family data
+- Family variables (household size, composition)
+- Head of household characteristics
+- Information about children
+- Format: `FAM{YEAR}ER.txt` and `FAM{YEAR}ER.sas`
+- Available years: 2009, 2011, 2013, 2015, 2017, 2019, 2021, 2023
 
-#### 2. **Module WLTH (Wealth)** - Données patrimoniales
-- Actifs (immobilier, actions, épargne)
-- Dettes (hypothèques, prêts)
-- IRA et comptes de retraite
-- Format: `WLTH{YEAR}.txt` et `WLTH{YEAR}.sas`
-- Années disponibles: 1999, 2001, 2003, 2005, 2007, 2009, 2011, 2013, ...
+#### 2. **WLTH (Wealth) Module** - Asset data
+- Assets (real estate, stocks, savings)
+- Debts (mortgages, loans)
+- IRAs and retirement accounts
+- Format: `WLTH{YEAR}.txt` and `WLTH{YEAR}.sas`
+- Available years: 1999, 2001, 2003, 2005, 2007, 2009, 2011, 2013, ...
 
-### Format des fichiers sources
+### Source File Format
 
-**Fichiers SAS (.sas)**
-- Scripts de lecture définissant les positions et largeurs des colonnes
-- Contiennent les métadonnées (noms de variables, types, labels)
+**SAS Files (.sas)**
+- Reading scripts defining column positions and widths
+- Contain metadata (variable names, types, labels)
 
-**Fichiers TXT (.txt)**
-- Données brutes en format largeur fixe (Fixed-Width Format)
-- Pas de séparateurs, positions définies par le fichier .sas
-- Exemple: une ligne = un enregistrement, chaque variable à position fixe
+**TXT Files (.txt)**
+- Raw data in fixed-width format
+- No separators, positions defined by .sas file
+- Example: one line = one record, each variable at fixed position
 
 ---
 
-## 🔄 Pipeline complet
+## 🔄 Complete Pipeline
 
-Le pipeline s'exécute en **5 étapes séquentielles** via le script `run_all.sh`:
+The pipeline runs in **5 sequential steps** via the `run_all.sh` script:
 
 ```
-[1] SAS/TXT → CSV  →  [2] Mapping  →  [3] Grille canonique  →  [4] Fusion  →  [5] Panel final
+[1] SAS/TXT → CSV  →  [2] Mapping  →  [3] Canonical Grid  →  [4] Merging  →  [5] Final Panel
 ```
 
-### Diagramme de flux
+### Flow Diagram
 
 ```
 ┌─────────────────┐
@@ -224,32 +224,32 @@ Le pipeline s'exécute en **5 étapes séquentielles** via le script `run_all.sh
 
 ---
 
-## 📝 Scripts détaillés
+## 📝 Detailed Scripts
 
-### 1️⃣ sas_to_csv.py - Conversion SAS/TXT vers CSV
+### 1️⃣ sas_to_csv.py - SAS/TXT to CSV Conversion
 
-**Objectif**: Convertir les fichiers bruts PSID (TXT à largeur fixe) en CSV exploitables.
+**Objective**: Convert raw PSID files (fixed-width TXT) into exploitable CSV.
 
-#### Fonctionnalités
-- Parse les scripts SAS (.sas) pour extraire les métadonnées de colonnes
-- Lit les fichiers TXT avec `pd.read_fwf()` (fixed-width format)
-- Ajoute une ligne de labels (2e ligne du CSV)
-- Gestion des erreurs de parsing avec fallback
-- Barres de progression (si tqdm installé)
+#### Features
+- Parse SAS scripts (.sas) to extract column metadata
+- Read TXT files with `pd.read_fwf()` (fixed-width format)
+- Add label row (2nd line of CSV)
+- Error handling with fallback
+- Progress bars (if tqdm installed)
 
-#### Utilisation
+#### Usage
 ```bash
-# Mode manuel
+# Manual mode
 python sas_to_csv.py \
   --file-list file_list.txt \
   --out-dir sorted_data
 
 # Via run_all.sh
-./run_all.sh  # Étape 1 automatique
+./run_all.sh  # Step 1 automatic
 ```
 
-#### Entrées
-- `file_list.txt`: Liste des fichiers à convertir
+#### Inputs
+- `file_list.txt`: List of files to convert
   ```
   FAM2009ER.sas
   FAM2009ER.txt
@@ -257,42 +257,42 @@ python sas_to_csv.py \
   WLTH1999.txt
   ```
 
-#### Sorties
+#### Outputs
 - `sorted_data/FAM{YEAR}ER_full.csv`
 - `sorted_data/WLTH{YEAR}_full.csv`
 - Structure:
-  - Ligne 1: Noms de variables (codes)
-  - Ligne 2: Labels descriptifs
-  - Lignes suivantes: Données
+  - Line 1: Variable names (codes)
+  - Line 2: Descriptive labels
+  - Following lines: Data
 
 #### Performance
-- ~1-2 minutes par fichier (variable selon taille)
-- Logging colorisé avec temps d'exécution
+- ~1-2 minutes per file (varies by size)
+- Colorized logging with execution time
 
 ---
 
-### 2️⃣ create_mapping.py - Construction du dictionnaire de variables
+### 2️⃣ create_mapping.py - Variable Dictionary Construction
 
-**Objectif**: Créer une table de correspondance exhaustive entre variables PSID et leur définition.
+**Objective**: Create comprehensive correspondence table between PSID variables and their definitions.
 
-#### Fonctionnalités
-- Analyse les headers de tous les CSV générés
-- Extrait les labels de la 2e ligne
-- Normalise les noms de variables en concepts canoniques
-- Détecte automatiquement le type (FAM/WLTH)
-- Applique des règles de synonymes et normalisation
-- Devine les types de données (numeric/string)
+#### Features
+- Analyzes headers of all generated CSV files
+- Extracts labels from 2nd line
+- Normalizes variable names into canonical concepts
+- Automatically detects type (FAM/WLTH)
+- Applies synonym and normalization rules
+- Guesses data types (numeric/string)
 
-#### Utilisation
+#### Usage
 ```bash
 python create_mapping.py \
   --data-dir sorted_data \
   --out-dir out
 ```
 
-#### Sorties principales
+#### Main Outputs
 
-**mapping_long.csv** - Format long exhaustif
+**mapping_long.csv** - Comprehensive long format
 ```csv
 canonical,year,file_type,var_code,label,category,dtype,required,transform
 family_id,2009,FAM,ER42001,"Family ID",Demographics,string,1,
@@ -300,18 +300,18 @@ num_children,2009,FAM,ER42003,"Number of children",Demographics,int,1,
 ira_balance,1999,WLTH,S517,"IRA Balance",Retirement/IRA,float,0,
 ```
 
-Colonnes:
-- `canonical`: Nom de concept normalisé
-- `year`: Année de l'enquête
-- `file_type`: FAM ou WLTH
-- `var_code`: Code variable PSID original
-- `label`: Description textuelle
-- `category`: Catégorie thématique
-- `dtype`: Type de données inféré
-- `required`: 1 si variable indispensable, 0 sinon
-- `transform`: Transformation éventuelle à appliquer
+Columns:
+- `canonical`: Normalized concept name
+- `year`: Survey year
+- `file_type`: FAM or WLTH
+- `var_code`: Original PSID variable code
+- `label`: Textual description
+- `category`: Thematic category
+- `dtype`: Inferred data type
+- `required`: 1 if essential variable, 0 otherwise
+- `transform`: Potential transformation to apply
 
-**fam_wlth_inventory.csv** - Inventaire des modules
+**fam_wlth_inventory.csv** - Module inventory
 ```csv
 year,module,file_path,num_variables,num_rows
 2009,FAM,sorted_data/FAM2009ER_full.csv,723,9144
@@ -320,27 +320,27 @@ year,module,file_path,num_variables,num_rows
 
 ---
 
-### 3️⃣ psid_tool.py - Grille canonique (Variables × Années)
+### 3️⃣ psid_tool.py - Canonical Grid (Variables × Years)
 
-**Objectif**: Créer une matrice pivotée avec les variables en lignes et les années en colonnes.
+**Objective**: Create pivoted matrix with variables in rows and years in columns.
 
-#### Fonctionnalités
-- Pivote `mapping_long.csv` en format wide
-- Résout les conflits de variables (préférence WLTH par défaut)
-- Ajoute une colonne `row` (numérotation 1-based)
-- Filtre optionnel par années
-- Gère les doublons et variables manquantes
+#### Features
+- Pivot `mapping_long.csv` into wide format
+- Resolve variable conflicts (WLTH preference by default)
+- Add `row` column (1-based numbering)
+- Optional filtering by years
+- Handle duplicates and missing variables
 
-#### Utilisation
+#### Usage
 ```bash
 python psid_tool.py \
   --mapping out/mapping_long.csv \
   --out-dir out \
-  --prefer WLTH           # Préférer WLTH en cas de conflit
-  --years 1999,2001,2009  # Optionnel: filtrer par années
+  --prefer WLTH           # Prefer WLTH in case of conflict
+  --years 1999,2001,2009  # Optional: filter by years
 ```
 
-#### Sortie: canonical_grid.csv
+#### Output: canonical_grid.csv
 
 Format:
 ```csv
@@ -350,120 +350,120 @@ row,concept,required,1999,2001,2003,2005,2007,2009,...,2023
 3,ira_balance,0,S517,S617,S717,S817,,ER46946
 ```
 
-Colonnes:
-- `row`: Numéro de ligne (ordre canonique)
-- `concept`: Nom du concept normalisé
-- `required`: Indicateur de variable indispensable
-- `{YEAR}`: Code variable pour chaque année (vide si absent)
+Columns:
+- `row`: Line number (canonical order)
+- `concept`: Normalized concept name
+- `required`: Essential variable indicator
+- `{YEAR}`: Variable code for each year (empty if absent)
 
 ---
 
-### 4️⃣ merge_grid.py - Fusion de lignes similaires
+### 4️⃣ merge_grid.py - Merge Similar Rows
 
-**Objectif**: Combiner plusieurs lignes de variables similaires en une seule ligne consolidée.
+**Objective**: Combine multiple rows of similar variables into a single consolidated row.
 
-#### Fonctionnalités
-- Lit les règles de fusion depuis `merge_groups.txt`
-- Fusionne les codes de variables par priorité (gauche → droite)
-- Conserve la première valeur non vide par année
-- Ajoute un suffixe `_merged` aux concepts fusionnés
+#### Features
+- Reads merge rules from `merge_groups.txt`
+- Merges variable codes by priority (left → right)
+- Keeps first non-empty value per year
+- Adds `_merged` suffix to merged concepts
 
-#### Utilisation
+#### Usage
 ```bash
 python merge_grid.py \
   --file out/canonical_grid.csv \
   --out out/canonical_grid_merged.csv \
   < merge_groups.txt
 
-# Ou via stdin
+# Or via stdin
 cat merge_groups.txt | python merge_grid.py \
   --file out/canonical_grid.csv \
   --out out/canonical_grid_merged.csv
 ```
 
-#### Format merge_groups.txt
+#### merge_groups.txt Format
 
-Chaque ligne définit un groupe de fusion:
+Each line defines a merge group:
 ```
 ira_balance ira_any ira_num
 wealth_wo_equity home_equity
 vehicles vehicle
 ```
 
-Règles:
-- Séparer les concepts par espaces
-- Le premier concept devient le nom fusionné (+ `_merged`)
-- Pour chaque année, prend la première valeur non vide de gauche à droite
-- Les lignes originales sont supprimées, une seule ligne fusionnée créée
+Rules:
+- Separate concepts with spaces
+- First concept becomes merged name (+ `_merged`)
+- For each year, takes first non-empty value from left to right
+- Original rows are removed, single merged row created
 
-#### Exemple
+#### Example
 
-**Avant fusion:**
+**Before merge:**
 ```csv
 concept,1999,2001,2003
 ira_balance,S517,,S717
 ira_any,,S618,
 ```
 
-**Règle:** `ira_balance ira_any`
+**Rule:** `ira_balance ira_any`
 
-**Après fusion:**
+**After merge:**
 ```csv
 concept,1999,2001,2003
 ira_balance_merged,S517,S618,S717
 ```
 
-#### Sortie
+#### Output
 - `canonical_grid_merged.csv`
-- Copié automatiquement vers `final_grid.csv` par `run_all.sh`
+- Automatically copied to `final_grid.csv` by `run_all.sh`
 
 ---
 
-### 5️⃣ build_final_panel.py - Panel optimisé en Parquet
+### 5️⃣ build_final_panel.py - Optimized Parquet Panel
 
-**Objectif**: Générer le panel final en format Parquet partitionné pour une analyse efficace.
+**Objective**: Generate final panel in partitioned Parquet format for efficient analysis.
 
-#### Fonctionnalités clés
-- Lecture optimisée chunk par chunk
-- Downcast automatique des types (Int32, float32, category)
-- Compression ZSTD
-- Partitionnement par année (et optionnellement par module)
-- Logging détaillé avec temps d'exécution
-- Support de `--rebuild` pour reconstruire depuis zéro
+#### Key Features
+- Optimized chunk-by-chunk reading
+- Automatic type downcasting (Int32, float32, category)
+- ZSTD compression
+- Partitioning by year (and optionally by module)
+- Detailed logging with execution times
+- Support for `--rebuild` to rebuild from scratch
 
-#### Utilisation
+#### Usage
 ```bash
 python build_final_panel.py \
   --data-dir sorted_data \
   --out-dir out \
   --final-dir final_results \
-  --rebuild                    # Optionnel: effacer et reconstruire
-  --partition-by-module        # Optionnel: partitionner aussi par FAM/WLTH
+  --rebuild                    # Optional: delete and rebuild
+  --partition-by-module        # Optional: also partition by FAM/WLTH
 ```
 
-#### Processus interne
-1. **Découverte** : Scan `sorted_data/` pour fichiers `*_full.csv`
-2. **Mapping** : Construit des mappings par (année, module)
-3. **Traitement chunk** :
-   - Pour chaque (année, module):
-     - Lit seulement les colonnes nécessaires
-     - Renomme selon mapping
-     - Downcast des types
-     - Écrit en Parquet partitionné
-4. **Manifest** : Génère des statistiques de sortie
+#### Internal Process
+1. **Discovery**: Scan `sorted_data/` for `*_full.csv` files
+2. **Mapping**: Build mappings per (year, module)
+3. **Chunk processing**:
+   - For each (year, module):
+     - Read only necessary columns
+     - Rename according to mapping
+     - Downcast types
+     - Write to partitioned Parquet
+4. **Manifest**: Generate output statistics
 
-#### Optimisations mémoire
-- **Copy-on-write** : `pd.options.mode.copy_on_write = True`
-- **Downcasting agressif** :
+#### Memory Optimizations
+- **Copy-on-write**: `pd.options.mode.copy_on_write = True`
+- **Aggressive downcasting**:
   - int → Int32 (nullable)
   - float → float32
-  - string répétitifs → category
-- **Garbage collection** : `gc.collect()` après chaque chunk
-- **Streaming** : Un seul chunk en mémoire à la fois
+  - repetitive strings → category
+- **Garbage collection**: `gc.collect()` after each chunk
+- **Streaming**: Only one chunk in memory at a time
 
-#### Sortie: panel.parquet/
+#### Output: panel.parquet/
 
-Structure du répertoire Parquet partitionné:
+Partitioned Parquet directory structure:
 ```
 final_results/panel.parquet/
 ├── year=1999/
@@ -480,43 +480,43 @@ final_results/panel.parquet/
 └── _common_metadata
 ```
 
-Format des colonnes:
-- `year` (int32): Année d'enquête
-- `module` (category): FAM ou WLTH
-- Variables canoniques (types optimisés)
+Column format:
+- `year` (int32): Survey year
+- `module` (category): FAM or WLTH
+- Canonical variables (optimized types)
 
 #### Performance
-- 10-50x plus rapide que CSV à la lecture
-- Compression ~70-80% par rapport à CSV
-- Requêtes filtrées ultra-rapides via prédicats Parquet
+- 10-50x faster than CSV for reading
+- Compression ~70-80% compared to CSV
+- Ultra-fast filtered queries via Parquet predicates
 
 ---
 
-### 6️⃣ build_panel_parent_child.py - Panel parent-enfant
+### 6️⃣ build_panel_parent_child.py - Parent-Child Panel
 
-**Objectif**: Construire un panel centré sur les relations familiales (parent → enfant).
+**Objective**: Build panel focused on family relationships (parent → child).
 
-#### Fonctionnalités
-- Extrait les variables "required" de `final_grid.csv`
-- Identifie les liens parent-enfant via `mother_id`, `father_id`
-- Filtre pour ne garder que les familles avec enfants
-- Génère plusieurs vues complémentaires
-- Format wide par famille (variables × années)
+#### Features
+- Extract "required" variables from `final_grid.csv`
+- Identify parent-child links via `mother_id`, `father_id`
+- Filter to keep only families with children
+- Generate multiple complementary views
+- Wide format per family (variables × years)
 
-#### Utilisation
+#### Usage
 ```bash
 python build_panel_parent_child.py \
   --final-grid out/final_grid.csv \
   --mapping out/mapping_long.csv \
   --data-dir sorted_data \
   --out-dir final_results \
-  --prefer WLTH                       # Préférer WLTH en cas de conflit
-  --write-family-files                # Optionnel: 1 CSV par famille
+  --prefer WLTH                       # Prefer WLTH in case of conflict
+  --write-family-files                # Optional: 1 CSV per family
 ```
 
-#### Sorties dans final_results/
+#### Outputs in final_results/
 
-**1. panel_parent_child.csv** - Panel long individuel
+**1. panel_parent_child.csv** - Individual long panel
 ```csv
 year,family_id,person_id,mother_id,father_id,concept1,concept2,...
 2009,100001,101,102,103,value1,value2,...
@@ -525,7 +525,7 @@ year,family_id,person_id,mother_id,father_id,concept1,concept2,...
 2011,100001,101,102,103,value1,value2,...
 ```
 
-**2. parent_child_links.csv** - Relations parent-enfant
+**2. parent_child_links.csv** - Parent-child relationships
 ```csv
 year,family_id,person_id,mother_id,father_id,is_parent
 2009,100001,101,102,103,False
@@ -533,21 +533,21 @@ year,family_id,person_id,mother_id,father_id,is_parent
 2009,100001,103,,,True
 ```
 
-**3. panel_summary.csv** - Statistiques descriptives
+**3. panel_summary.csv** - Descriptive statistics
 ```csv
 concept,non_missing,mean,median,std
 ira_balance,12450,45678.32,28000.0,51234.12
 num_children,24850,2.3,2.0,1.2
 ```
 
-**4. codes_resolved_audit.csv** - Journal de correspondances
+**4. codes_resolved_audit.csv** - Correspondence log
 ```csv
 concept,year,var_code,file_type
 family_id,2009,ER42001,FAM
 ira_balance,1999,S517,WLTH
 ```
 
-**5. ★ panel_grid_by_family.csv** - Format wide par famille
+**5. ★ panel_grid_by_family.csv** - Wide format per family
 ```csv
 family_id,concept,1999,2001,2003,2005,2007,2009,...
 100001,family_id,100001,100001,100001,100001,100001,100001,...
@@ -558,14 +558,14 @@ family_id,concept,1999,2001,2003,2005,2007,2009,...
 ```
 
 Structure:
-- Index multi-niveau conceptuel: (family_id, concept)
-- Une ligne par (famille, concept)
-- Colonnes = années
-- Valeurs = agrégation par famille (priorité aux parents)
+- Conceptual multi-level index: (family_id, concept)
+- One row per (family, concept)
+- Columns = years
+- Values = aggregation by family (priority to parents)
 
-**6. family_grids/{family_id}.csv** (optionnel avec --write-family-files)
+**6. family_grids/{family_id}.csv** (optional with --write-family-files)
 
-Un fichier CSV par famille:
+One CSV file per family:
 ```
 family_grids/
 ├── 100001.csv
@@ -574,7 +574,7 @@ family_grids/
 ...
 ```
 
-Chaque fichier contient la grille de cette famille uniquement:
+Each file contains that family's grid only:
 ```csv
 concept,1999,2001,2003,2005,...
 family_id,100001,100001,100001,100001,...
@@ -582,20 +582,20 @@ num_children,2,2,3,3,...
 ira_balance,15000,18000,22000,28000,...
 ```
 
-#### Règles d'agrégation
+#### Aggregation Rules
 
-Pour chaque (famille, année, concept):
-1. Si variable identifiable chez un parent → prendre valeur parent
-2. Sinon, prendre la première valeur non manquante de n'importe quel membre
-3. Si aucune valeur disponible → `pd.NA`
+For each (family, year, concept):
+1. If variable identifiable from parent → take parent value
+2. Otherwise, take first non-missing value from any member
+3. If no value available → `pd.NA`
 
 ---
 
-## 📄 Fichiers de configuration
+## 📄 Configuration Files
 
 ### file_list.txt
 
-Liste des paires SAS/TXT à convertir en CSV.
+List of SAS/TXT pairs to convert to CSV.
 
 **Format**:
 ```
@@ -608,15 +608,15 @@ WLTH1999.txt
 ...
 ```
 
-**Règles**:
-- Une ligne par fichier
-- Toujours par paire: `.sas` puis `.txt`
-- Noms relatifs ou absolus
-- Chemins résolus depuis `sorted_data/`
+**Rules**:
+- One line per file
+- Always in pairs: `.sas` then `.txt`
+- Relative or absolute names
+- Paths resolved from `sorted_data/`
 
 ### merge_groups.txt
 
-Définit les groupes de variables à fusionner.
+Defines groups of variables to merge.
 
 **Format**:
 ```
@@ -624,13 +624,13 @@ concept1 concept2 concept3
 concept4 concept5
 ```
 
-**Règles**:
-- Une ligne = un groupe de fusion
-- Concepts séparés par espaces
-- Premier concept = nom de base (+ `_merged`)
-- Fusion par priorité gauche → droite
+**Rules**:
+- One line = one merge group
+- Concepts separated by spaces
+- First concept = base name (+ `_merged`)
+- Merge by priority left → right
 
-**Exemple réaliste**:
+**Realistic example**:
 ```
 ira_balance ira_any ira_num ira_contrib
 wealth_wo_equity home_equity other_assets
@@ -639,125 +639,125 @@ mortgage debt vehicle_loan
 
 ---
 
-## 🚀 Utilisation
+## 🚀 Usage
 
-### Exécution complète du pipeline
+### Complete Pipeline Execution
 
-La méthode **recommandée** est d'utiliser le script maître:
+The **recommended** method is to use the master script:
 
 ```bash
-# Rendre le script exécutable (une seule fois)
+# Make script executable (once only)
 chmod +x run_all.sh
 
-# Lancer le pipeline complet
+# Launch complete pipeline
 ./run_all.sh
 ```
 
-Le script:
-1. Vérifie la présence des répertoires
-2. Exécute les 5 étapes dans l'ordre
-3. Affiche des logs colorisés avec timestamps
-4. S'arrête en cas d'erreur
-5. Affiche un résumé final avec temps d'exécution total
+The script:
+1. Checks for directory presence
+2. Executes 5 steps in order
+3. Displays colorized logs with timestamps
+4. Stops on error
+5. Shows final summary with total execution time
 
-### Mode verbeux / silencieux
+### Verbose / Quiet Mode
 
 ```bash
-# Mode silencieux (erreurs uniquement)
+# Quiet mode (errors only)
 QUIET=1 ./run_all.sh
 
-# Mode très verbeux
+# Very verbose mode
 VERBOSE=1 ./run_all.sh
 
-# Combinaison
+# Combination
 VERBOSE=0 QUIET=1 ./run_all.sh
 ```
 
-### Exécution partielle
+### Partial Execution
 
-Si vous voulez relancer seulement certaines étapes:
+If you want to re-run only certain steps:
 
 ```bash
-# Étape 1 uniquement (conversion)
+# Step 1 only (conversion)
 python sas_to_csv.py --file-list file_list.txt --out-dir sorted_data
 
-# Étape 2 uniquement (mapping)
+# Step 2 only (mapping)
 python create_mapping.py --data-dir sorted_data --out-dir out
 
-# Étape 3 uniquement (grille)
+# Step 3 only (grid)
 python psid_tool.py --mapping out/mapping_long.csv --out-dir out --prefer WLTH
 
-# Étape 4 uniquement (fusion)
+# Step 4 only (merge)
 python merge_grid.py --file out/canonical_grid.csv --out out/canonical_grid_merged.csv < merge_groups.txt
 cp out/canonical_grid_merged.csv out/final_grid.csv
 
-# Étape 5 uniquement (panel final)
+# Step 5 only (final panel)
 python build_final_panel.py --data-dir sorted_data --out-dir out --final-dir final_results --rebuild
 ```
 
-### Mode rebuild (reconstruction complète)
+### Rebuild Mode (Complete Reconstruction)
 
-Pour forcer une reconstruction depuis zéro:
+To force rebuild from scratch:
 
 ```bash
-# Nettoyer tous les fichiers intermédiaires
+# Clean all intermediate files
 rm -rf out/* final_results/*
 
-# Relancer le pipeline
+# Re-run pipeline
 ./run_all.sh
 ```
 
-Ou cibler seulement le panel final:
+Or target only final panel:
 
 ```bash
 python build_final_panel.py \
   --data-dir sorted_data \
   --out-dir out \
   --final-dir final_results \
-  --rebuild  # Force la suppression et recréation de panel.parquet/
+  --rebuild  # Force deletion and recreation of panel.parquet/
 ```
 
 ---
 
-## 📤 Formats de sortie
+## 📤 Output Formats
 
-### 1. Panel Parquet (recommandé pour analyse)
+### 1. Parquet Panel (recommended for analysis)
 
-**Fichier**: `final_results/panel.parquet/`
+**File**: `final_results/panel.parquet/`
 
-**Lecture en Python**:
+**Reading in Python**:
 
 ```python
 import pandas as pd
 
-# Lecture complète (attention à la mémoire!)
+# Complete read (watch memory!)
 df = pd.read_parquet('final_results/panel.parquet')
 
-# Lecture d'une seule année (très rapide grâce au partitionnement)
+# Read single year (very fast thanks to partitioning)
 df_2009 = pd.read_parquet(
     'final_results/panel.parquet',
     filters=[('year', '==', 2009)]
 )
 
-# Lecture de plusieurs années
+# Read multiple years
 df_recent = pd.read_parquet(
     'final_results/panel.parquet',
     filters=[('year', 'in', [2015, 2017, 2019, 2021, 2023])]
 )
 
-# Lecture du module WLTH uniquement
+# Read WLTH module only
 df_wlth = pd.read_parquet(
     'final_results/panel.parquet',
     filters=[('module', '==', 'WLTH')]
 )
 
-# Lecture de colonnes spécifiques (très efficace)
+# Read specific columns (very efficient)
 df_subset = pd.read_parquet(
     'final_results/panel.parquet',
     columns=['year', 'family_id', 'ira_balance', 'num_children']
 )
 
-# Combinaison de filtres
+# Combined filters
 df_filtered = pd.read_parquet(
     'final_results/panel.parquet',
     filters=[
@@ -768,214 +768,214 @@ df_filtered = pd.read_parquet(
 )
 ```
 
-**Lecture en R** (avec arrow):
+**Reading in R** (with arrow):
 
 ```r
 library(arrow)
 
-# Lecture complète
+# Complete read
 df <- read_parquet("final_results/panel.parquet")
 
-# Lecture avec filtres
+# Read with filters
 df_2009 <- open_dataset("final_results/panel.parquet") %>%
   filter(year == 2009) %>%
   collect()
 
-# Lecture optimisée avec dplyr
+# Optimized read with dplyr
 df_filtered <- open_dataset("final_results/panel.parquet") %>%
   filter(year >= 2009, module == "WLTH") %>%
   select(year, family_id, ira_balance) %>%
   collect()
 ```
 
-### 2. Panel par famille (format wide)
+### 2. Panel by Family (wide format)
 
-**Fichier**: `final_results/panel_grid_by_family.csv`
+**File**: `final_results/panel_grid_by_family.csv`
 
 **Structure**:
-- Lignes: (family_id, concept)
-- Colonnes: années
-- Idéal pour analyses longitudinales par famille
+- Rows: (family_id, concept)
+- Columns: years
+- Ideal for longitudinal analysis by family
 
-**Lecture**:
+**Reading**:
 
 ```python
 import pandas as pd
 
-# Charger le panel
+# Load panel
 panel = pd.read_csv('final_results/panel_grid_by_family.csv')
 
-# Extraire une famille spécifique
+# Extract specific family
 family_100001 = panel[panel['family_id'] == '100001']
 
-# Pivoter pour analyse
+# Pivot for analysis
 pivot = family_100001.set_index('concept').drop(columns=['family_id'])
 
-# Accéder à une variable spécifique pour toutes les familles
+# Access specific variable for all families
 ira_evolution = panel[panel['concept'] == 'ira_balance'].set_index('family_id')
 ```
 
-### 3. Panel long individuel
+### 3. Individual Long Panel
 
-**Fichier**: `final_results/panel_parent_child.csv`
+**File**: `final_results/panel_parent_child.csv`
 
 **Structure**:
-- Format long classique (panel data)
-- Lignes: observations (personne × année)
-- Colonnes: year, family_id, person_id, mother_id, father_id, variables...
+- Classic long format (panel data)
+- Rows: observations (person × year)
+- Columns: year, family_id, person_id, mother_id, father_id, variables...
 
-**Lecture**:
+**Reading**:
 
 ```python
 import pandas as pd
 
-# Charger le panel long
+# Load long panel
 panel_long = pd.read_csv('final_results/panel_parent_child.csv')
 
-# Statistiques par année
+# Statistics by year
 stats_by_year = panel_long.groupby('year').agg({
     'ira_balance': ['mean', 'median', 'std'],
     'num_children': ['mean', 'sum']
 })
 
-# Filtrer les parents uniquement
+# Filter parents only
 parents = panel_long[
     panel_long['person_id'].isin(panel_long['mother_id']) |
     panel_long['person_id'].isin(panel_long['father_id'])
 ]
 
-# Panel par famille
+# Panel by family
 family_panel = panel_long.groupby(['family_id', 'year']).first()
 ```
 
 ---
 
-## ⚡ Optimisations mémoire
+## ⚡ Memory Optimizations
 
-Le pipeline implémente plusieurs stratégies d'optimisation pour gérer des datasets volumineux:
+The pipeline implements several optimization strategies for handling large datasets:
 
-### 1. Downcast automatique des types
+### 1. Automatic Type Downcasting
 
 ```python
-# Avant optimisation
-df['year'] = df['year'].astype('int64')     # 8 bytes par valeur
-df['value'] = df['value'].astype('float64') # 8 bytes par valeur
+# Before optimization
+df['year'] = df['year'].astype('int64')     # 8 bytes per value
+df['value'] = df['value'].astype('float64') # 8 bytes per value
 
-# Après optimisation
-df['year'] = df['year'].astype('int32')     # 4 bytes par valeur (-50%)
-df['value'] = df['value'].astype('float32') # 4 bytes par valeur (-50%)
+# After optimization
+df['year'] = df['year'].astype('int32')     # 4 bytes per value (-50%)
+df['value'] = df['value'].astype('float32') # 4 bytes per value (-50%)
 ```
 
-**Gain typique**: 40-60% de réduction de mémoire
+**Typical gain**: 40-60% memory reduction
 
-### 2. Types catégoriels pour variables répétitives
+### 2. Categorical Types for Repetitive Variables
 
 ```python
-# Avant
+# Before
 df['module'] = df['module'].astype('string')  # ~6 bytes × nb_rows
 
-# Après
+# After
 df['module'] = df['module'].astype('category')  # ~1 byte × nb_rows + dict
 ```
 
-**Gain**: 80-90% pour colonnes avec peu de valeurs uniques
+**Gain**: 80-90% for columns with few unique values
 
-### 3. Nullable integers (Int32 vs int32)
+### 3. Nullable Integers (Int32 vs int32)
 
 ```python
-# Utilisation de Int32 (nullable) au lieu de float pour préserver les NaN
+# Use Int32 (nullable) instead of float to preserve NaN
 df['count'] = df['count'].astype('Int32')
 ```
 
-**Avantages**:
-- Conserve les valeurs manquantes sans conversion en float
-- Économie de mémoire vs float64
+**Advantages**:
+- Preserves missing values without float conversion
+- Memory savings vs float64
 
-### 4. Copy-on-write
+### 4. Copy-on-Write
 
 ```python
-# Activé globalement
+# Activated globally
 pd.options.mode.copy_on_write = True
 ```
 
-**Avantages**:
-- Évite les copies implicites
-- Réduit les pics de mémoire
+**Advantages**:
+- Avoids implicit copies
+- Reduces memory peaks
 
-### 5. Traitement par chunks
+### 5. Chunk Processing
 
 ```python
-# Au lieu de tout charger en mémoire
+# Instead of loading everything into memory
 for chunk in pd.read_csv('huge_file.csv', chunksize=10000):
     process(chunk)
     write_to_parquet(chunk)
     del chunk
-    gc.collect()  # Libération explicite
+    gc.collect()  # Explicit cleanup
 ```
 
-### 6. Colonnes sélectives (usecols)
+### 6. Selective Columns (usecols)
 
 ```python
-# Ne lire que les colonnes nécessaires
+# Read only necessary columns
 df = pd.read_csv('data.csv', usecols=['col1', 'col2', 'col3'])
 ```
 
-**Gain**: Proportionnel au ratio colonnes utilisées / colonnes totales
+**Gain**: Proportional to used columns / total columns ratio
 
-### Résumé des gains
+### Summary of Gains
 
-| Technique | Gain mémoire typique |
+| Technique | Typical Memory Gain |
 |-----------|---------------------|
 | Downcast int64→Int32 | 50% |
 | Downcast float64→float32 | 50% |
 | String→Category (module, year) | 85% |
 | Copy-on-write | 20-30% |
-| Usecols (50% des colonnes) | 50% |
-| **TOTAL CUMULÉ** | **70-85%** |
+| Usecols (50% of columns) | 50% |
+| **CUMULATIVE TOTAL** | **70-85%** |
 
-**Exemple réaliste**:
-- Dataset brut: 8 GB en mémoire
-- Après optimisations: 1.2 - 2.4 GB
-- Panel Parquet avec compression ZSTD: 300-500 MB sur disque
+**Realistic example**:
+- Raw dataset: 8 GB in memory
+- After optimizations: 1.2 - 2.4 GB
+- Parquet panel with ZSTD compression: 300-500 MB on disk
 
 ---
 
-## 🛠️ Dépannage
+## 🛠️ Troubleshooting
 
-### Problèmes courants et solutions
+### Common Problems and Solutions
 
-#### 1. **Erreur: "No module named 'pyarrow'"**
+#### 1. **Error: "No module named 'pyarrow'"**
 
-**Cause**: Dépendance Parquet manquante
+**Cause**: Missing Parquet dependency
 
 **Solution**:
 ```bash
 pip install pyarrow
-# Ou alternative
+# Or alternative
 pip install fastparquet
 ```
 
-#### 2. **MemoryError lors de l'exécution**
+#### 2. **MemoryError during execution**
 
-**Cause**: Dataset trop volumineux pour la RAM disponible
+**Cause**: Dataset too large for available RAM
 
 **Solutions**:
 
-A. Réduire le nombre d'années:
+A. Reduce number of years:
 ```bash
-# Éditer file_list.txt pour ne garder que quelques années
+# Edit file_list.txt to keep only a few years
 python sas_to_csv.py --file-list file_list.txt --out-dir sorted_data
 ```
 
-B. Augmenter le chunksize:
+B. Increase chunksize:
 ```python
-# Dans build_final_panel.py, modifier:
-chunksize = 5000  # Au lieu de 10000
+# In build_final_panel.py, modify:
+chunksize = 5000  # Instead of 10000
 ```
 
-C. Utiliser swap/virtual memory (Linux):
+C. Use swap/virtual memory (Linux):
 ```bash
-# Créer un fichier de swap de 8 GB
+# Create 8 GB swap file
 sudo fallocate -l 8G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
@@ -984,62 +984,62 @@ sudo swapon /swapfile
 
 #### 3. **FileNotFoundError: final_grid.csv**
 
-**Cause**: Étape précédente non exécutée ou échouée
+**Cause**: Previous step not executed or failed
 
-**Solution**: Relancer le pipeline complet
+**Solution**: Re-run complete pipeline
 ```bash
 ./run_all.sh
 ```
 
-Ou manuellement les étapes manquantes:
+Or manually run missing steps:
 ```bash
 python psid_tool.py --mapping out/mapping_long.csv --out-dir out
 python merge_grid.py --file out/canonical_grid.csv --out out/canonical_grid_merged.csv < merge_groups.txt
 cp out/canonical_grid_merged.csv out/final_grid.csv
 ```
 
-#### 4. **Colonnes vides dans panel.parquet**
+#### 4. **Empty columns in panel.parquet**
 
-**Cause**: Variables pas présentes dans les fichiers sources
+**Cause**: Variables not present in source files
 
-**Diagnostic**:
+**Diagnosis**:
 ```bash
-# Vérifier mapping_long.csv
+# Check mapping_long.csv
 cat out/mapping_long.csv | grep "variable_name"
 
-# Vérifier canonical_grid.csv
+# Check canonical_grid.csv
 cat out/canonical_grid.csv | grep "variable_name"
 ```
 
-**Solution**: Vérifier que les fichiers sources contiennent bien ces variables
+**Solution**: Verify that source files actually contain these variables
 
-#### 5. **Erreur "cannot concatenate object of type"**
+#### 5. **Error "cannot concatenate object of type"**
 
-**Cause**: Incohérence de types entre chunks
+**Cause**: Type inconsistency between chunks
 
-**Solution**: Forcer dtype='string' partout
+**Solution**: Force dtype='string' everywhere
 ```python
-# Dans le script, ajouter:
+# In script, add:
 df = pd.read_csv(path, dtype='string', low_memory=False)
 ```
 
-#### 6. **Temps d'exécution très long**
+#### 6. **Very long execution time**
 
-**Causes possibles**:
-- Trop de fichiers à convertir
-- Pas de barres de progression (tqdm)
-- Disque lent
+**Possible causes**:
+- Too many files to convert
+- No progress bars (tqdm)
+- Slow disk
 
 **Solutions**:
 
-A. Installer tqdm:
+A. Install tqdm:
 ```bash
 pip install tqdm
 ```
 
-B. Paralléliser manuellement:
+B. Manually parallelize:
 ```bash
-# Convertir FAM et WLTH en parallèle dans 2 terminaux
+# Convert FAM and WLTH in parallel in 2 terminals
 # Terminal 1
 python sas_to_csv.py --pattern "FAM*" --out-dir sorted_data
 
@@ -1047,21 +1047,21 @@ python sas_to_csv.py --pattern "FAM*" --out-dir sorted_data
 python sas_to_csv.py --pattern "WLTH*" --out-dir sorted_data
 ```
 
-C. Utiliser un SSD si possible
+C. Use SSD if possible
 
-#### 7. **Encoding errors lors de la lecture**
+#### 7. **Encoding errors during reading**
 
-**Cause**: Caractères spéciaux dans fichiers SAS/TXT
+**Cause**: Special characters in SAS/TXT files
 
 **Solution**:
 ```python
-# Forcer l'encoding
-df = pd.read_fwf(path, encoding='latin-1')  # ou 'cp1252'
+# Force encoding
+df = pd.read_fwf(path, encoding='latin-1')  # or 'cp1252'
 ```
 
-#### 8. **Permission denied lors de l'exécution de run_all.sh**
+#### 8. **Permission denied when running run_all.sh**
 
-**Cause**: Fichier pas exécutable
+**Cause**: File not executable
 
 **Solution**:
 ```bash
@@ -1071,60 +1071,60 @@ chmod +x run_all.sh
 
 ---
 
-## 💡 Exemples d'utilisation
+## 💡 Usage Examples
 
-### Exemple 1: Analyse de l'évolution du patrimoine
+### Example 1: Wealth Evolution Analysis
 
 ```python
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Charger les données de patrimoine (WLTH)
+# Load wealth data (WLTH)
 df = pd.read_parquet(
     'final_results/panel.parquet',
     filters=[('module', '==', 'WLTH')],
     columns=['year', 'family_id', 'ira_balance', 'wealth_wo_equity']
 )
 
-# Calculer le patrimoine moyen par année
+# Calculate average wealth by year
 wealth_by_year = df.groupby('year').agg({
     'ira_balance': 'mean',
     'wealth_wo_equity': 'mean'
 }).reset_index()
 
-# Visualisation
+# Visualization
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.plot(wealth_by_year['year'], wealth_by_year['ira_balance'],
-        marker='o', label='IRA moyen')
+        marker='o', label='Average IRA')
 ax.plot(wealth_by_year['year'], wealth_by_year['wealth_wo_equity'],
-        marker='s', label='Patrimoine (sans equity)')
-ax.set_xlabel('Année')
-ax.set_ylabel('Montant ($)')
-ax.set_title('Évolution du patrimoine moyen 1999-2023')
+        marker='s', label='Wealth (without equity)')
+ax.set_xlabel('Year')
+ax.set_ylabel('Amount ($)')
+ax.set_title('Average Wealth Evolution 1999-2023')
 ax.legend()
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('wealth_evolution.png', dpi=300)
 ```
 
-### Exemple 2: Comparaison familles avec/sans enfants
+### Example 2: Comparison Families With/Without Children
 
 ```python
 import pandas as pd
 import numpy as np
 
-# Charger le panel parent-enfant
+# Load parent-child panel
 panel = pd.read_csv('final_results/panel_parent_child.csv')
 
-# Identifier familles avec enfants
+# Identify families with children
 families_with_kids = panel[
     panel['mother_id'].notna() | panel['father_id'].notna()
 ]['family_id'].unique()
 
-# Créer le flag
+# Create flag
 panel['has_children'] = panel['family_id'].isin(families_with_kids)
 
-# Statistiques comparatives
+# Comparative statistics
 comparison = panel.groupby(['year', 'has_children']).agg({
     'ira_balance': ['mean', 'median'],
     'num_children': 'mean',
@@ -1134,41 +1134,41 @@ comparison = panel.groupby(['year', 'has_children']).agg({
 print(comparison)
 ```
 
-### Exemple 3: Tracking longitudinal d'une famille
+### Example 3: Longitudinal Tracking of One Family
 
 ```python
 import pandas as pd
 
-# Charger la grille par famille
+# Load grid by family
 panel_wide = pd.read_csv('final_results/panel_grid_by_family.csv')
 
-# Extraire une famille spécifique
+# Extract specific family
 family_id = '100001'
 family_data = panel_wide[panel_wide['family_id'] == family_id]
 
-# Pivoter pour avoir concepts en index, années en colonnes
+# Pivot to have concepts as index, years as columns
 family_pivot = family_data.set_index('concept').drop(columns=['family_id'])
 
-# Afficher l'évolution
-print(f"Évolution de la famille {family_id}:")
-print(family_pivot.T)  # Transposer pour années en lignes
+# Display evolution
+print(f"Evolution of family {family_id}:")
+print(family_pivot.T)  # Transpose for years as rows
 
-# Calculer des taux de croissance
+# Calculate growth rates
 numeric_vars = ['ira_balance', 'wealth_wo_equity']
 for var in numeric_vars:
     if var in family_pivot.index:
         series = pd.to_numeric(family_pivot.loc[var], errors='coerce')
         growth = series.pct_change() * 100
-        print(f"\nCroissance annuelle {var}:")
+        print(f"\nAnnual growth {var}:")
         print(growth.dropna().round(2))
 ```
 
-### Exemple 4: Export pour Stata/R
+### Example 4: Export for Stata/R
 
 ```python
 import pandas as pd
 
-# Charger panel long
+# Load long panel
 df = pd.read_csv('final_results/panel_parent_child.csv')
 
 # Export Stata
@@ -1178,20 +1178,20 @@ df.to_stata('panel_for_stata.dta', write_index=False, version=118)
 import pyreadr
 pyreadr.write_rds('panel_for_r.rds', df)
 
-# Export CSV optimisé
+# Optimized CSV export
 df.to_csv('panel_optimized.csv', index=False, compression='gzip')
 ```
 
-### Exemple 5: Requêtes complexes sur Parquet
+### Example 5: Complex Queries on Parquet
 
 ```python
 import pandas as pd
 import pyarrow.parquet as pq
 
-# Ouvrir le dataset Parquet
+# Open Parquet dataset
 dataset = pq.ParquetDataset('final_results/panel.parquet')
 
-# Requête complexe avec filtres multiples
+# Complex query with multiple filters
 table = dataset.read(
     columns=['year', 'family_id', 'ira_balance', 'num_children'],
     filters=[
@@ -1201,10 +1201,10 @@ table = dataset.read(
     ]
 )
 
-# Convertir en pandas
+# Convert to pandas
 df = table.to_pandas()
 
-# Analyse
+# Analysis
 summary = df.groupby('year').agg({
     'ira_balance': ['mean', 'median', 'std', 'count'],
     'num_children': 'mean',
@@ -1214,27 +1214,27 @@ summary = df.groupby('year').agg({
 print(summary)
 ```
 
-### Exemple 6: Détection de valeurs aberrantes
+### Example 6: Outlier Detection
 
 ```python
 import pandas as pd
 import numpy as np
 
-# Charger données
+# Load data
 df = pd.read_parquet(
     'final_results/panel.parquet',
     columns=['year', 'family_id', 'ira_balance']
 )
 
-# Convertir en numérique
+# Convert to numeric
 df['ira_balance'] = pd.to_numeric(df['ira_balance'], errors='coerce')
 
-# Calculer quartiles et IQR
+# Calculate quartiles and IQR
 Q1 = df['ira_balance'].quantile(0.25)
 Q3 = df['ira_balance'].quantile(0.75)
 IQR = Q3 - Q1
 
-# Détecter outliers
+# Detect outliers
 lower_bound = Q1 - 1.5 * IQR
 upper_bound = Q3 + 1.5 * IQR
 
@@ -1243,52 +1243,52 @@ outliers = df[
     (df['ira_balance'] > upper_bound)
 ]
 
-print(f"Nombre d'outliers: {len(outliers)}")
-print(f"% d'outliers: {len(outliers)/len(df)*100:.2f}%")
-print("\nExemples d'outliers:")
+print(f"Number of outliers: {len(outliers)}")
+print(f"% of outliers: {len(outliers)/len(df)*100:.2f}%")
+print("\nOutlier examples:")
 print(outliers.head(10))
 ```
 
 ---
 
-## 📊 Schéma de données complet
+## 📊 Complete Data Schema
 
-### Relations entre tables
+### Table Relationships
 
 ```
-mapping_long.csv (dictionnaire)
+mapping_long.csv (dictionary)
     │
     ├─→ canonical_grid.csv (pivot)
     │       │
-    │       └─→ final_grid.csv (après fusion)
+    │       └─→ final_grid.csv (after merge)
     │               │
-    │               ├─→ panel.parquet/ (données optimisées)
+    │               ├─→ panel.parquet/ (optimized data)
     │               │
-    │               └─→ panel_grid_by_family.csv (wide par famille)
+    │               └─→ panel_grid_by_family.csv (wide by family)
     │
     └─→ codes_resolved_audit.csv (audit)
 
 sorted_data/*_full.csv (sources)
     │
-    └─→ fam_wlth_inventory.csv (inventaire)
+    └─→ fam_wlth_inventory.csv (inventory)
 ```
 
-### Cardinalités
+### Cardinalities
 
-- **mapping_long.csv**: ~50,000 - 200,000 lignes (dépend du nb d'années × variables)
-- **canonical_grid.csv**: ~500 - 2,000 lignes (concepts uniques)
-- **panel.parquet/**: 1M - 50M lignes (dépend des années et familles)
-- **panel_grid_by_family.csv**: ~10,000 - 500,000 lignes (familles × concepts)
+- **mapping_long.csv**: ~50,000 - 200,000 rows (depends on years × variables)
+- **canonical_grid.csv**: ~500 - 2,000 rows (unique concepts)
+- **panel.parquet/**: 1M - 50M rows (depends on years and families)
+- **panel_grid_by_family.csv**: ~10,000 - 500,000 rows (families × concepts)
 
 ---
 
-## 🔐 Considérations de confidentialité
+## 🔐 Privacy Considerations
 
-Les données PSID peuvent contenir des informations sensibles. Bonnes pratiques:
+PSID data may contain sensitive information. Best practices:
 
-1. **Ne jamais commiter les données** dans un repo Git
+1. **Never commit data** to a Git repo
    ```bash
-   # Ajouter à .gitignore
+   # Add to .gitignore
    sorted_data/
    out/
    final_results/
@@ -1296,13 +1296,13 @@ Les données PSID peuvent contenir des informations sensibles. Bonnes pratiques:
    *.parquet
    ```
 
-2. **Chiffrer les données au repos** (recommandé)
+2. **Encrypt data at rest** (recommended)
    ```bash
-   # Exemple avec GPG
+   # Example with GPG
    tar czf - final_results/ | gpg -c > final_results.tar.gz.gpg
    ```
 
-3. **Contrôler l'accès** aux fichiers
+3. **Control file access**
    ```bash
    chmod 600 final_results/*.csv
    chmod 700 final_results/panel.parquet/
@@ -1310,71 +1310,71 @@ Les données PSID peuvent contenir des informations sensibles. Bonnes pratiques:
 
 ---
 
-## 📚 Ressources PSID
+## 📚 PSID Resources
 
-- **Site officiel**: https://psidonline.isr.umich.edu/
-- **Documentation des variables**: https://simba.isr.umich.edu/default.aspx
+- **Official site**: https://psidonline.isr.umich.edu/
+- **Variable documentation**: https://simba.isr.umich.edu/default.aspx
 - **User Guide**: https://psidonline.isr.umich.edu/Guide/default.aspx
 - **FAQs**: https://psidonline.isr.umich.edu/FAQ/
 
 ---
 
-## 🤝 Contribution
+## 🤝 Contributing
 
-Pour signaler un bug ou proposer une amélioration:
+To report a bug or suggest an improvement:
 
-1. Vérifier que le problème n'existe pas déjà
-2. Créer une issue avec:
-   - Description du problème/amélioration
-   - Étapes de reproduction (si bug)
-   - Logs d'erreur
-   - Version Python et dépendances
+1. Check that the issue doesn't already exist
+2. Create an issue with:
+   - Problem/improvement description
+   - Reproduction steps (if bug)
+   - Error logs
+   - Python version and dependencies
 
 ---
 
-## 📝 Licence
+## 📝 License
 
-Ce projet est un outil de recherche académique. Les données PSID sont soumises à leur propre licence d'utilisation.
+This project is an academic research tool. PSID data is subject to its own usage license.
 
 ---
 
 ## ✨ Changelog
 
-### Version actuelle (2024)
+### Current Version (2024)
 
-**Nouvelles fonctionnalités:**
-- Pipeline complet automatisé via `run_all.sh`
-- Support Parquet avec compression ZSTD
-- Optimisations mémoire agressives (Int32, float32, category)
-- Logging colorisé avec timestamps
-- Support barres de progression (tqdm)
-- Mode rebuild pour panel.parquet
+**New Features:**
+- Complete automated pipeline via `run_all.sh`
+- Parquet support with ZSTD compression
+- Aggressive memory optimizations (Int32, float32, category)
+- Colorized logging with timestamps
+- Progress bar support (tqdm)
+- Rebuild mode for panel.parquet
 
-**Scripts principaux:**
-- `sas_to_csv.py`: Conversion SAS/TXT optimisée
-- `create_mapping.py`: Mapping avec normalisation avancée
-- `psid_tool.py`: Grille canonique avec résolution de conflits
-- `merge_grid.py`: Fusion de lignes configurables
-- `build_final_panel.py`: Panel Parquet memory-efficient
-- `build_panel_parent_child.py`: Panel famille-enfant avec relations
+**Main Scripts:**
+- `sas_to_csv.py`: Optimized SAS/TXT conversion
+- `create_mapping.py`: Mapping with advanced normalization
+- `psid_tool.py`: Canonical grid with conflict resolution
+- `merge_grid.py`: Configurable row merging
+- `build_final_panel.py`: Memory-efficient Parquet panel
+- `build_panel_parent_child.py`: Family-child panel with relationships
 
-**Améliorations:**
-- Gestion robuste des erreurs
-- Documentation exhaustive
-- Copy-on-write pour réduction mémoire
-- Partitionnement intelligent par année/module
+**Improvements:**
+- Robust error handling
+- Comprehensive documentation
+- Copy-on-write for memory reduction
+- Intelligent partitioning by year/module
 
 ---
 
 ## 📞 Support
 
-Pour toute question technique:
-1. Consulter la section [Dépannage](#dépannage)
-2. Vérifier les [Exemples d'utilisation](#exemples-dutilisation)
-3. Lire les docstrings des scripts (en-tête de chaque .py)
+For technical questions:
+1. Consult the [Troubleshooting](#troubleshooting) section
+2. Check [Usage Examples](#usage-examples)
+3. Read script docstrings (header of each .py file)
 
 ---
 
-**Dernière mise à jour**: 2024-11-01
+**Last updated**: 2024-11-01
 **Version**: 3.0
-**Auteur**: Pipeline PSID RA Team
+**Author**: PSID Pipeline RA Team
