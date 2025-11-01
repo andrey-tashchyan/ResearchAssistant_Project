@@ -396,8 +396,8 @@ algo3/
 
 ### Requirements
 - Python 3.8+
-- 8 GB RAM minimum (16 GB recommended)
-- 10 GB disk space
+- ~6 GB RAM minimum
+- 1 GB disk space
 
 ### Setup
 
@@ -1180,3 +1180,4 @@ source psid_env/bin/activate
 **Version:** 3.0
 **Last Updated:** 2024-11-01
 **Authors:** PSID Pipeline RA Team
+
