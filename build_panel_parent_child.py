@@ -24,6 +24,7 @@ Sorties dans final_results/ :
 from __future__ import annotations
 
 import argparse
+import gc
 import logging
 import re
 from pathlib import Path
@@ -509,11 +510,13 @@ def main():
 
     # 4) Extraction par année
     yearly_frames = []
+    logger.info(f"[MEMORY] Starting yearly extraction for {len(years)} years")
     for y in years:
         if y not in files_by_year:
             logger.warning("No files for year %s", y)
             continue
 
+        logger.info(f"[MEMORY] Processing year {y}...")
         codes_needed: Set[str] = set()
         rename_to_concept: Dict[str, str] = {}
         for concept, per_year in code_map.items():
@@ -528,12 +531,15 @@ def main():
             if c:
                 id_pref.append(c)
 
+        logger.info(f"[MEMORY] Reading year {y} data (codes_needed={len(codes_needed)})...")
         dfy = read_year_data(
             y, files_by_year[y], codes_needed, rename_to_concept, id_pref, logger
         )
         if dfy.empty:
             logger.warning("Year %s produced no data after selection.", y)
             continue
+
+        logger.info(f"[MEMORY] Year {y} loaded: {dfy.shape[0]} rows x {dfy.shape[1]} cols")
 
         # Renommer les IDs (codes explicites) → noms standards si présents
         id_ren = {}
@@ -549,16 +555,33 @@ def main():
                 dfy[k] = pd.NA
 
         yearly_frames.append(dfy)
+        logger.info(f"[MEMORY] Year {y} appended to list (total years so far: {len(yearly_frames)})")
 
     # 5) Concat panel long et filtrer familles avec enfants
     if yearly_frames:
+        logger.info(f"[MEMORY] Starting concatenation of {len(yearly_frames)} yearly dataframes...")
         panel = pd.concat(yearly_frames, axis=0, ignore_index=True)
+        logger.info(f"[MEMORY] Concatenation complete. Panel shape: {panel.shape[0]} rows x {panel.shape[1]} cols")
+
+        # Libérer la mémoire immédiatement après concatenation
+        del yearly_frames
+        gc.collect()
+        logger.info("[MEMORY] yearly_frames deleted, garbage collected")
+
         concept_cols = [c for c in panel.columns if c not in {"year","family_id","person_id","mother_id","father_id"}]
         panel = panel[["year","family_id","person_id","mother_id","father_id"] + concept_cols]
+        logger.info(f"[MEMORY] Panel reorganized. Shape: {panel.shape[0]} rows x {panel.shape[1]} cols")
     else:
         panel = pd.DataFrame(columns=["year","family_id","person_id","mother_id","father_id"])
 
+    logger.info("[MEMORY] Starting family filtering...")
     panel_filtered = filter_families_with_children(panel)
+    logger.info(f"[MEMORY] Filtering complete. Filtered panel: {panel_filtered.shape[0]} rows x {panel_filtered.shape[1]} cols")
+
+    # Libérer panel original après filtrage
+    del panel
+    gc.collect()
+    logger.info("[MEMORY] Original panel deleted, garbage collected")
 
     # 6) Liens parent-enfant
     links = build_parent_child_links(panel_filtered)
